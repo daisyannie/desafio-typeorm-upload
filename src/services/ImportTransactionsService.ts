@@ -5,6 +5,15 @@ import uploadConfig from '../config/upload';
 
 import Transaction from '../models/Transaction';
 
+import CreateTransactionService from './CreateTransactionService';
+
+interface Request {
+  title: string;
+  value: number;
+  type: 'income' | 'outcome';
+  category: string;
+}
+
 class ImportTransactionsService {
   async execute(filename: string): Promise<Transaction[]> {
     const csvFilePath = path.resolve(uploadConfig.directory, filename);
@@ -18,20 +27,31 @@ class ImportTransactionsService {
 
     const parseCSV = readCSVStream.pipe(parseStream);
 
-    const lines: string[] = [];
+    const csvTransactions: Request[] = [];
 
-    parseCSV.on('data', line => {
-      lines.push(line);
+    parseCSV.on('data', async line => {
+      const [title, type, value, category] = line.map((cell: string) =>
+        cell.trim(),
+      );
+      csvTransactions.push({ title, type, value, category });
     });
 
     await new Promise(resolve => {
       parseCSV.on('end', resolve);
     });
 
-    console.log(lines);
+    const insertedTransactions: Transaction[] = [];
 
-    const transactions: Transaction[] = [];
-    return transactions;
+    const createTransactionService = new CreateTransactionService();
+
+    for (const itemTransaction of csvTransactions) {
+      const transaction = await createTransactionService.execute(
+        itemTransaction,
+      );
+      insertedTransactions.push(transaction);
+    }
+
+    return insertedTransactions;
   }
 }
 
